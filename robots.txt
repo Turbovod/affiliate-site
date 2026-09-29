@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://turbovod.github.io/affiliate-site/sitemap.xml
