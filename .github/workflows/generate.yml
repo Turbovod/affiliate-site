@@ -1,0 +1,28 @@
+name: Generate daily articles
+on:
+  schedule:
+    - cron: '0 6 * * *'   # 06:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install feedparser requests
+      - name: Run generator
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/generate_content.py
+      - name: Commit changes
+        run: |
+          git config --global user.email "bot@example.com"
+          git config --global user.name "AutoBot"
+          git add content/*.md
+          git commit -m "auto‑generated articles $(date +%Y-%m-%d)" || echo "No changes"
+          git push
