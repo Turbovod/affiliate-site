@@ -51,17 +51,23 @@ def generate_article(title: str) -> str:
     payload = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}]
     }
-    resp = requests.post(API_URL, json=payload)
-    resp.raise_for_status()
-    result = resp.json()
     try:
+        resp = requests.post(API_URL, json=payload, timeout=60)
+        resp.raise_for_status()
+        result = resp.json()
         return result["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception:
+    except Exception as e:
+        print(f"Error generating article for '{title}': {e}")
         return ""
 
 
+generated_count = 0
 for feed_url in RSS_FEEDS:
-    feed = feedparser.parse(feed_url)
+    try:
+        feed = feedparser.parse(feed_url)
+    except Exception as e:
+        print(f"Error parsing feed {feed_url}: {e}")
+        continue
     for entry in feed.entries[:NUM_ARTICLES]:
         title = entry.title.replace("?", "").replace("/", "-")
         slug = "-".join(title.lower().split()[:6])
@@ -71,11 +77,15 @@ for feed_url in RSS_FEEDS:
         # Replace {{link:keyword}} with real affiliate URLs
         article_text = replace_affiliate_placeholders(article_text)
         md_path = OUT_DIR / f"{slug}.md"
-        front = f"---\ntitle: \"{title}\"\ndate: {datetime.datetime.utcnow().isoformat()}\n---\n\n"
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        front = f"---\ntitle: \"{title}\"\ndate: {now}\n---\n\n"
         md_path.write_text(front + article_text, encoding="utf-8")
+        generated_count += 1
         print(f"Generated {md_path}")
+
+print(f"\nTotal articles generated: {generated_count}")
 
 # Commit changes (GitHub Actions will actually run this)
 subprocess.run(["git", "add", "content/*.md"], cwd=ROOT_DIR)
-subprocess.run(["git", "commit", "-m", f"auto-generated articles {datetime.datetime.utcnow().strftime('%Y-%m-%d')}"], cwd=ROOT_DIR)
+subprocess.run(["git", "commit", "-m", f"auto-generated articles {datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')}"], cwd=ROOT_DIR)
 subprocess.run(["git", "push"], cwd=ROOT_DIR)
