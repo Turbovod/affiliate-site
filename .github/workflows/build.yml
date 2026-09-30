@@ -1,27 +1,93 @@
-// .github/workflows/build.yml
 name: Build & Deploy to GitHub Pages
 
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'content/**'
   workflow_dispatch:
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Node
-        uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - name: Install dependencies
-        run: npm ci
-      - name: Build site
-        run: npm run build
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+          ref: main
+
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./out
-          commit_message: "Deploy site (auto)"
+          ref: gh-pages
+          path: gh-pages-dir
+
+      - name: Copy articles to gh-pages
+        run: |
+          mkdir -p gh-pages-dir/articles
+          if [ -d content ]; then
+            for f in content/*.md; do
+              [ -f "$f" ] || continue
+              BASENAME=$(basename "$f" .md)
+              # Convert markdown to simple HTML
+              TITLE=$(head -3 "$f" | grep 'title:' | sed 's/title: "//;s/"$//')
+              CONTENT=$(tail -n +6 "$f")
+              cat > "gh-pages-dir/articles/${BASENAME}.html" <<HTMLEOF
+          <!DOCTYPE html>
+          <html lang="ru">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>${TITLE}</title>
+            <meta name="description" content="${TITLE} - обзор, плюсы и минусы">
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f8f9fa; color: #333; line-height: 1.8; }
+              h1 { color: #1a1a2e; }
+              a { color: #0066cc; }
+              .banner { text-align: center; margin: 20px 0; }
+              .back { display: inline-block; margin: 20px 0; padding: 10px 20px; background: #0066cc; color: #fff; text-decoration: none; border-radius: 6px; }
+            </style>
+          </head>
+          <body>
+            <a href="../" class="back">← Главная</a>
+            <h1>${TITLE}</h1>
+            <div class="banner">
+              <a target="_blank" rel="nofollow" href="https://rzekl.com/g/hfzguitca66e5ae64ae216525dc3e8/?i=4"><img width="468" height="90" border="0" src="https://ad.admitad.com/b/hfzguitca66e5ae64ae216525dc3e8/" alt="AliExpress"/></a>
+            </div>
+            <article>
+          $(echo "$CONTENT" | sed 's/$/<br>/')
+            </article>
+            <div class="banner">
+              <a target="_blank" rel="nofollow" href="https://rzekl.com/g/hfzguitca66e5ae64ae216525dc3e8/?i=4"><img width="468" height="90" border="0" src="https://ad.admitad.com/b/hfzguitca66e5ae64ae216525dc3e8/" alt="AliExpress"/></a>
+            </div>
+          </body>
+          </html>
+          HTMLEOF
+              echo "Converted $f -> articles/${BASENAME}.html"
+            done
+          fi
+
+      - name: Update index with article links
+        run: |
+          cd gh-pages-dir
+          # Build article list HTML
+          ARTICLES_HTML=""
+          for f in articles/*.html; do
+            [ -f "$f" ] || continue
+            BASENAME=$(basename "$f" .html)
+            TITLE=$(grep '<title>' "$f" | sed 's/.*<title>//;s/<\/title>.*//')
+            ARTICLES_HTML="${ARTICLES_HTML}<li><a href=\"${f}\">${TITLE}</a></li>"
+          done
+          if [ -n "$ARTICLES_HTML" ]; then
+            sed -i "s|<p>Здесь скоро появятся статьи с обзорами.*</p>|<ul class=\"articles\">${ARTICLES_HTML}</ul>|" index.html
+          fi
+
+      - name: Deploy to gh-pages
+        run: |
+          cd gh-pages-dir
+          git config user.email "bot@example.com"
+          git config user.name "AutoBot"
+          git add -A
+          git commit -m "Deploy articles $(date +%Y-%m-%d)" || echo "No changes"
+          git push origin gh-pages
